@@ -6,11 +6,14 @@ export const LEVELS = [
     killY: 780,
     goal: { x: 3600 - 140, y: 610, width: 18, height: 120 },
 
+    checkpoints: [
+      // Halfway checkpoint
+      { x: 1800, y: 610, width: 18, height: 110 },
+    ],
+
     platforms: [
-      // ground
       { x: 3600 / 2, y: 680, w: 3600, h: 60 },
 
-      // platforms
       { x: 350, y: 560, w: 240, h: 24 },
       { x: 650, y: 480, w: 240, h: 24 },
       { x: 980, y: 420, w: 260, h: 24 },
@@ -23,7 +26,6 @@ export const LEVELS = [
       { x: 2950, y: 360, w: 260, h: 24 },
       { x: 3250, y: 480, w: 260, h: 24 },
 
-      // end stretch
       { x: 3420, y: 420, w: 240, h: 24 },
       { x: 3520, y: 520, w: 200, h: 24 },
     ],
