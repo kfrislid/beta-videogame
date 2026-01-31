@@ -1,9 +1,7 @@
-/* Phase 3.1: scrolling level + camera follow + coins + score + better jumping
-   Adds:
-   - Higher jump
-   - Slightly lower gravity
-   - Coyote time (late jump)
-   - Jump buffer (early jump)
+/* Phase 4: scrolling level + coins + score + forgiving jumps + simple patrolling enemies
+   - Enemies patrol back/forth
+   - Touch enemy from side => respawn
+   - Stomp enemy from above => enemy removed + points
 */
 
 const GAME_WIDTH = 960;
@@ -16,23 +14,31 @@ const LEVEL = {
 
 const PLAYER = {
   radius: 18,
-  moveSpeed: 260,     // a bit faster helps reach gaps
-  jumpSpeed: 560,     // higher jump
+  moveSpeed: 260,
+  jumpSpeed: 560,
 };
 
 const WORLD = {
-  gravityY: 850,      // slightly less gravity = more hang time
+  gravityY: 850,
   killY: 780,
 };
 
 const FEEL = {
-  coyoteMs: 120,      // can jump up to 120ms after leaving ground
-  jumpBufferMs: 140,  // if pressed within 140ms before landing, still jump
+  coyoteMs: 120,
+  jumpBufferMs: 140,
 };
 
 const COIN = {
   size: 24,
   radius: 10,
+};
+
+const ENEMY = {
+  size: 34,          // texture size
+  bodyRadius: 14,    // physics circle
+  speed: 90,         // patrol speed
+  stompBounce: 320,  // little hop after stomping
+  points: 50,
 };
 
 class MainScene extends Phaser.Scene {
@@ -42,6 +48,7 @@ class MainScene extends Phaser.Scene {
     this.player = null;
     this.platforms = null;
     this.coins = null;
+    this.enemies = null;
 
     this.cursors = null;
     this.keys = null;
@@ -52,9 +59,9 @@ class MainScene extends Phaser.Scene {
     this.scoreText = null;
 
     this.coinPositions = [];
+    this.enemyData = [];
 
-    // Jump feel state
-    this.lastOnGroundAt = 0;     // timestamp (ms)
+    this.lastOnGroundAt = 0;
     this.lastJumpPressedAt = -9999;
   }
 
@@ -69,6 +76,7 @@ class MainScene extends Phaser.Scene {
     // ---- Platforms ----
     this.platforms = this.physics.add.staticGroup();
 
+    // Ground across entire level
     this.addPlatform(LEVEL.width / 2, 680, LEVEL.width, 60);
 
     const platformData = [
@@ -89,20 +97,21 @@ class MainScene extends Phaser.Scene {
     // ---- Textures ----
     this.makePlayerTexture();
     this.makeCoinTexture();
+    this.makeEnemyTexture();
 
     // ---- Player ----
     this.player = this.physics.add.sprite(this.spawnPoint.x, this.spawnPoint.y, "player");
 
-    const body = this.player.body;
-    body.setCircle(PLAYER.radius);
-    body.setOffset(0, 0);
-    body.setCollideWorldBounds(true);
-    body.setMaxVelocity(650, 1200);
-    body.setDragX(1200);
+    const pBody = this.player.body;
+    pBody.setCircle(PLAYER.radius);
+    pBody.setOffset(0, 0);
+    pBody.setCollideWorldBounds(true);
+    pBody.setMaxVelocity(650, 1200);
+    pBody.setDragX(1200);
 
     this.physics.add.collider(this.player, this.platforms);
 
-    // ---- Camera follow ----
+    // ---- Camera ----
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.cameras.main.setDeadzone(200, 120);
 
@@ -137,6 +146,30 @@ class MainScene extends Phaser.Scene {
       this
     );
 
+    // ---- Enemies ----
+    // Each enemy has a patrol range [minX, maxX]
+    this.enemyData = [
+      { x: 700, y: 440, minX: 580, maxX: 760 },      // on platform around x=650
+      { x: 1770, y: 420, minX: 1640, maxX: 1860 },   // on platform around x=1750
+      { x: 2660, y: 400, minX: 2520, maxX: 2780 },   // on platform around x=2650
+      { x: 3200, y: 640, minX: 3050, maxX: 3350 },   // ground patrol
+    ];
+
+    this.enemies = this.physics.add.group();
+    this.spawnAllEnemies();
+
+    // Enemies collide with platforms so they stay on ground/ledges
+    this.physics.add.collider(this.enemies, this.platforms);
+
+    // Player <> enemy interaction
+    this.physics.add.collider(
+      this.player,
+      this.enemies,
+      (player, enemy) => this.handlePlayerEnemyCollision(enemy),
+      null,
+      this
+    );
+
     // ---- Input ----
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys({
@@ -163,19 +196,19 @@ class MainScene extends Phaser.Scene {
   update(time) {
     const body = this.player.body;
 
-    // Track ground contact time for coyote time
+    // Track ground time for coyote time
     if (body.blocked.down) {
       this.lastOnGroundAt = time;
     }
 
-    // Movement
+    // Move
     const left = this.cursors.left.isDown || this.keys.A.isDown;
     const right = this.cursors.right.isDown || this.keys.D.isDown;
 
     if (left) body.setVelocityX(-PLAYER.moveSpeed);
     else if (right) body.setVelocityX(PLAYER.moveSpeed);
 
-    // If jump pressed, store it (jump buffer)
+    // Jump buffer
     const jumpJustPressed =
       Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
       Phaser.Input.Keyboard.JustDown(this.keys.W) ||
@@ -185,25 +218,24 @@ class MainScene extends Phaser.Scene {
       this.lastJumpPressedAt = time;
     }
 
-    // Perform jump if:
-    // - jump was pressed recently (buffer)
-    // - AND player is on ground OR within coyote time
     const buffered = time - this.lastJumpPressedAt <= FEEL.jumpBufferMs;
     const canCoyote = time - this.lastOnGroundAt <= FEEL.coyoteMs;
 
     if (buffered && (body.blocked.down || canCoyote)) {
       body.setVelocityY(-PLAYER.jumpSpeed);
-      this.lastJumpPressedAt = -9999; // consume buffer
+      this.lastJumpPressedAt = -9999;
     }
 
     // Fell off world
     if (this.player.y > WORLD.killY) {
       this.respawn();
     }
+
+    // Enemy patrol AI
+    this.updateEnemies();
   }
 
-  // ---------- Helpers ----------
-
+  // ---------- Platforms ----------
   addPlatform(x, y, width, height) {
     const rect = this.add.rectangle(x, y, width, height, 0x3b82f6).setAlpha(0.85);
     this.physics.add.existing(rect, true);
@@ -211,6 +243,7 @@ class MainScene extends Phaser.Scene {
     return rect;
   }
 
+  // ---------- Textures ----------
   makePlayerTexture() {
     if (this.textures.exists("player")) return;
 
@@ -245,6 +278,30 @@ class MainScene extends Phaser.Scene {
     g.destroy();
   }
 
+  makeEnemyTexture() {
+    if (this.textures.exists("enemy")) return;
+
+    const s = ENEMY.size;
+    const g = this.add.graphics();
+
+    // body
+    g.fillStyle(0xef4444, 1);
+    g.fillRoundedRect(2, 6, s - 4, s - 10, 8);
+
+    // eyes
+    g.fillStyle(0x111827, 1);
+    g.fillCircle(s / 2 - 6, s / 2, 3);
+    g.fillCircle(s / 2 + 6, s / 2, 3);
+
+    // tiny highlight
+    g.fillStyle(0xfca5a5, 1);
+    g.fillCircle(s / 2 - 9, s / 2 - 6, 3);
+
+    g.generateTexture("enemy", s, s);
+    g.destroy();
+  }
+
+  // ---------- Coins ----------
   spawnAllCoins() {
     this.coinPositions.forEach(({ x, y }) => {
       const coin = this.coins.create(x, y, "coin");
@@ -271,17 +328,91 @@ class MainScene extends Phaser.Scene {
     }
   }
 
+  // ---------- Enemies ----------
+  spawnAllEnemies() {
+    this.enemyData.forEach((e) => {
+      const enemy = this.enemies.create(e.x, e.y, "enemy");
+
+      enemy.setData("minX", e.minX);
+      enemy.setData("maxX", e.maxX);
+      enemy.setData("dir", 1); // 1 = right, -1 = left
+
+      enemy.body.setCircle(ENEMY.bodyRadius);
+      // Center the circle in the texture
+      enemy.body.setOffset(ENEMY.size / 2 - ENEMY.bodyRadius, ENEMY.size / 2 - ENEMY.bodyRadius);
+
+      enemy.body.setCollideWorldBounds(true);
+      enemy.body.setImmovable(false);
+      enemy.body.setAllowGravity(true);
+
+      enemy.setVelocityX(ENEMY.speed);
+    });
+  }
+
+  updateEnemies() {
+    this.enemies.children.iterate((enemy) => {
+      if (!enemy || !enemy.active) return;
+
+      const minX = enemy.getData("minX");
+      const maxX = enemy.getData("maxX");
+      let dir = enemy.getData("dir");
+
+      // Turn around at patrol edges
+      if (enemy.x <= minX) dir = 1;
+      if (enemy.x >= maxX) dir = -1;
+
+      enemy.setData("dir", dir);
+      enemy.setVelocityX(dir * ENEMY.speed);
+
+      // Flip visually (optional)
+      enemy.setFlipX(dir < 0);
+    });
+  }
+
+  handlePlayerEnemyCollision(enemy) {
+    // If player is falling and hits enemy from above => stomp
+    const pBody = this.player.body;
+    const eBody = enemy.body;
+
+    const playerFalling = pBody.velocity.y > 0;
+    const playerAboveEnemy = this.player.y < enemy.y - 6;
+
+    if (playerFalling && playerAboveEnemy) {
+      // Stomp!
+      enemy.disableBody(true, true);
+
+      // Bounce up a bit
+      pBody.setVelocityY(-ENEMY.stompBounce);
+
+      // Score
+      this.score += ENEMY.points;
+      this.scoreText.setText(`Score: ${this.score}`);
+      return;
+    }
+
+    // Otherwise: "damage" => respawn
+    this.respawn();
+  }
+
+  // ---------- Respawn / Reset ----------
   respawn() {
     this.player.setPosition(this.spawnPoint.x, this.spawnPoint.y);
     this.player.body.setVelocity(0, 0);
+
+    // Small optional invulnerability window could be added later
   }
 
   fullReset() {
     this.score = 0;
     this.scoreText.setText("Score: 0");
 
+    // Reset coins
     this.coins.clear(true, true);
     this.spawnAllCoins();
+
+    // Reset enemies
+    this.enemies.clear(true, true);
+    this.spawnAllEnemies();
 
     this.respawn();
   }
