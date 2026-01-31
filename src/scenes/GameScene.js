@@ -1,10 +1,27 @@
 import { LEVELS } from "../levels.js";
 import { ensureTextures } from "../systems/textures.js";
 import { createUI } from "../systems/ui.js";
-import { createPlayer, updatePlayerMovement, respawnPlayer, setPlayerFrozen, flashInvuln } from "../systems/player.js";
+import {
+  createPlayer,
+  updatePlayerMovement,
+  respawnPlayer,
+  setPlayerFrozen,
+  flashInvuln,
+} from "../systems/player.js";
 import { createCoins, resetCoins } from "../systems/coins.js";
-import { createEnemies, updateEnemies, resetEnemies, handlePlayerEnemyCollision } from "../systems/enemies.js";
+import {
+  createEnemies,
+  updateEnemies,
+  resetEnemies,
+  handlePlayerEnemyCollision,
+} from "../systems/enemies.js";
 import { createGoal } from "../systems/goal.js";
+import {
+  createCheckpoints,
+  setCheckpointActive,
+  resetCheckpoints,
+  getActiveCheckpointSpawn,
+} from "../systems/checkpoints.js";
 
 const Phaser = window.Phaser;
 
@@ -37,6 +54,8 @@ export class GameScene extends Phaser.Scene {
     this.enemies = null;
     this.goal = null;
 
+    this.checkpoints = null;
+
     this.ui = null;
 
     this.state = {
@@ -58,12 +77,22 @@ export class GameScene extends Phaser.Scene {
     this.level = LEVELS[this.levelIndex];
 
     // World bounds + camera bounds
-    this.physics.world.setBounds(0, 0, this.level.world.width, this.level.world.height);
-    this.cameras.main.setBounds(0, 0, this.level.world.width, this.level.world.height);
+    this.physics.world.setBounds(
+      0,
+      0,
+      this.level.world.width,
+      this.level.world.height
+    );
+    this.cameras.main.setBounds(
+      0,
+      0,
+      this.level.world.width,
+      this.level.world.height
+    );
 
     this.cameras.main.setBackgroundColor("#1b1f2a");
 
-    // Build platforms
+    // Platforms
     this.platforms = this.physics.add.staticGroup();
     for (const p of this.level.platforms) this.addPlatform(p.x, p.y, p.w, p.h);
 
@@ -75,6 +104,17 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.cameras.main.setDeadzone(200, 120);
 
+    // Checkpoints (optional per level)
+    const cps = this.level.checkpoints ?? [];
+    this.checkpoints = createCheckpoints(this, cps);
+
+    this.physics.add.overlap(this.player, this.checkpoints, (player, cp) => {
+      if (this.state.mode !== Mode.PLAY) return;
+      // Only trigger if not already active
+      if (cp.getData("active")) return;
+      setCheckpointActive(this.checkpoints, cp);
+    });
+
     // Coins
     this.coins = createCoins(this, this.level.coins);
     this.physics.add.overlap(this.player, this.coins, (player, coin) => {
@@ -83,7 +123,6 @@ export class GameScene extends Phaser.Scene {
       this.state.score += GAME.coinPoints;
       this.ui.setScore(this.state.score);
 
-      // Optional: respawn coins once all collected
       if (this.coins.countActive(true) === 0) {
         this.time.delayedCall(450, () => {
           if (this.state.mode !== Mode.PLAY) return;
@@ -145,7 +184,7 @@ export class GameScene extends Phaser.Scene {
   update(time) {
     if (this.state.mode !== Mode.PLAY) return;
 
-    // Lose life if fell off world
+    // Fell off world -> lose life
     if (this.player.y > this.level.killY) {
       this.loseLife();
       return;
@@ -170,6 +209,12 @@ export class GameScene extends Phaser.Scene {
     this.platforms.add(rect);
   }
 
+  getRespawnPoint() {
+    // If a checkpoint is active, respawn there; otherwise at level spawn
+    const cp = getActiveCheckpointSpawn(this.checkpoints);
+    return cp ?? { x: this.level.spawn.x, y: this.level.spawn.y };
+  }
+
   loseLife() {
     const now = this.time.now;
     if (now < this.state.invulnerableUntil) return;
@@ -185,7 +230,7 @@ export class GameScene extends Phaser.Scene {
     this.state.invulnerableUntil = now + GAME.invulnMs;
     flashInvuln(this, this.player);
 
-    respawnPlayer(this.player, this.level.spawn);
+    respawnPlayer(this.player, this.getRespawnPoint());
   }
 
   gameOver() {
@@ -219,10 +264,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   fullReset() {
-    // Resume physics
     this.physics.world.resume();
 
-    // Reset state
     this.state.mode = Mode.PLAY;
     this.state.score = 0;
     this.state.lives = GAME.livesStart;
@@ -230,21 +273,21 @@ export class GameScene extends Phaser.Scene {
     this.state.lastOnGroundAt = 0;
     this.state.lastJumpPressedAt = -9999;
 
-    // UI
     this.ui.hideOverlay();
     this.ui.setScore(this.state.score);
     this.ui.setLives(this.state.lives);
 
-    // Reset coins/enemies
     resetCoins(this, this.coins, this.level.coins);
     resetEnemies(this, this.enemies, this.level.enemies);
 
-    // Respawn player + unfreeze
+    // Reset checkpoints (back to spawn)
+    resetCheckpoints(this.checkpoints);
+
     setPlayerFrozen(this.player, false);
     this.enemies.children.iterate((e) => e?.body && (e.body.moves = true));
-    respawnPlayer(this.player, this.level.spawn);
+    respawnPlayer(this.player, { x: this.level.spawn.x, y: this.level.spawn.y });
 
-    // Reset camera to start nicely
+    // Reset camera
     this.cameras.main.stopFollow();
     this.cameras.main.scrollX = 0;
     this.cameras.main.scrollY = 0;
