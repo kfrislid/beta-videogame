@@ -1,31 +1,22 @@
-/* Phase 1.5: platformer + coins + score
-   - Move left/right
-   - Jump
-   - Platforms + gravity + collisions
-   - Coins (overlap to collect)
-   - Score UI
-   - Fall off map = respawn (score stays)
-   - R key = reset (score resets)
-*/
+/* Phase 2.5: circle player with outline + coins + score */
 
 const GAME_WIDTH = 960;
 const GAME_HEIGHT = 540;
 
 const PLAYER = {
-  width: 32,
-  height: 48,
+  radius: 18,
   moveSpeed: 220,
   jumpSpeed: 420,
 };
 
 const WORLD = {
   gravityY: 900,
-  killY: 650, // if player falls below this, respawn
+  killY: 650,
 };
 
 const COIN = {
+  size: 24,
   radius: 10,
-  color: 0xfbbf24,
 };
 
 class MainScene extends Phaser.Scene {
@@ -43,57 +34,8 @@ class MainScene extends Phaser.Scene {
 
     this.score = 0;
     this.scoreText = null;
-  }
 
-  preload() {
-    // No external assets yet (we'll add sprites later).
-  }
-
-  create() {
-    // Background
-    this.cameras.main.setBackgroundColor("#1b1f2a");
-
-    // Physics settings
-    this.physics.world.gravity.y = WORLD.gravityY;
-
-    // --- Platforms (static physics bodies) ---
-    this.platforms = this.physics.add.staticGroup();
-
-    // Ground
-    this.addPlatform(480, 520, 960, 40);
-
-    // Ledges
-    this.addPlatform(260, 420, 240, 24);
-    this.addPlatform(520, 340, 240, 24);
-    this.addPlatform(760, 260, 220, 24);
-    this.addPlatform(140, 270, 180, 24);
-
-    // --- Player (dynamic physics body) ---
-    this.player = this.add.rectangle(
-      this.spawnPoint.x,
-      this.spawnPoint.y,
-      PLAYER.width,
-      PLAYER.height,
-      0x4fe3c1
-    );
-
-    this.physics.add.existing(this.player);
-    const body = this.player.body;
-
-    body.setCollideWorldBounds(true);
-    body.setSize(PLAYER.width, PLAYER.height);
-    body.setOffset(-PLAYER.width / 2, -PLAYER.height / 2); // align rect to body
-    body.setMaxVelocity(400, 900);
-    body.setDragX(900);
-
-    // Collide player with platforms
-    this.physics.add.collider(this.player, this.platforms);
-
-    // --- Coins (static bodies, overlap pickup) ---
-    this.coins = this.add.group();
-
-    // Place coins around your level (you can add/remove positions)
-    const coinPositions = [
+    this.coinPositions = [
       { x: 260, y: 380 },
       { x: 520, y: 300 },
       { x: 760, y: 220 },
@@ -101,10 +43,44 @@ class MainScene extends Phaser.Scene {
       { x: 420, y: 480 },
       { x: 860, y: 480 },
     ];
+  }
 
-    coinPositions.forEach((p) => this.spawnCoin(p.x, p.y));
+  create() {
+    this.cameras.main.setBackgroundColor("#1b1f2a");
+    this.physics.world.gravity.y = WORLD.gravityY;
 
-    // Overlap: player collects coins
+    // ---- Platforms ----
+    this.platforms = this.physics.add.staticGroup();
+    this.addPlatform(480, 520, 960, 40);
+    this.addPlatform(260, 420, 240, 24);
+    this.addPlatform(520, 340, 240, 24);
+    this.addPlatform(760, 260, 220, 24);
+    this.addPlatform(140, 270, 180, 24);
+
+    // ---- Textures ----
+    this.makePlayerTexture();
+    this.makeCoinTexture();
+
+    // ---- Player (circle sprite) ----
+    this.player = this.physics.add.sprite(
+      this.spawnPoint.x,
+      this.spawnPoint.y,
+      "player"
+    );
+
+    const body = this.player.body;
+    body.setCircle(PLAYER.radius);
+    body.setOffset(0, 0);
+    body.setCollideWorldBounds(true);
+    body.setMaxVelocity(400, 900);
+    body.setDragX(900);
+
+    this.physics.add.collider(this.player, this.platforms);
+
+    // ---- Coins ----
+    this.coins = this.physics.add.staticGroup();
+    this.spawnAllCoins();
+
     this.physics.add.overlap(
       this.player,
       this.coins,
@@ -113,7 +89,7 @@ class MainScene extends Phaser.Scene {
       this
     );
 
-    // Input
+    // ---- Input ----
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys({
       A: Phaser.Input.Keyboard.KeyCodes.A,
@@ -123,18 +99,14 @@ class MainScene extends Phaser.Scene {
       SPACE: Phaser.Input.Keyboard.KeyCodes.SPACE,
     });
 
-    // Score UI
+    // ---- Score ----
     this.score = 0;
-    this.scoreText = this.add
-      .text(12, 12, "Score: 0", {
-        fontSize: "18px",
-        color: "#e5e7eb",
-        fontFamily:
-          "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
-      })
-      .setScrollFactor(0);
+    this.scoreText = this.add.text(12, 12, "Score: 0", {
+      fontSize: "18px",
+      color: "#e5e7eb",
+      fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    });
 
-    // Reset key (also resets score + respawns coins)
     this.keys.R.on("down", () => this.fullReset());
   }
 
@@ -144,14 +116,9 @@ class MainScene extends Phaser.Scene {
     const left = this.cursors.left.isDown || this.keys.A.isDown;
     const right = this.cursors.right.isDown || this.keys.D.isDown;
 
-    // Move
-    if (left) {
-      body.setVelocityX(-PLAYER.moveSpeed);
-    } else if (right) {
-      body.setVelocityX(PLAYER.moveSpeed);
-    }
+    if (left) body.setVelocityX(-PLAYER.moveSpeed);
+    else if (right) body.setVelocityX(PLAYER.moveSpeed);
 
-    // Jump (only if touching down)
     const jumpPressed =
       Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
       Phaser.Input.Keyboard.JustDown(this.keys.W) ||
@@ -161,79 +128,93 @@ class MainScene extends Phaser.Scene {
       body.setVelocityY(-PLAYER.jumpSpeed);
     }
 
-    // Fell off the world => respawn (score stays)
     if (this.player.y > WORLD.killY) {
       this.respawn();
     }
   }
 
-  addPlatform(x, y, width, height) {
-    const rect = this.add
-      .rectangle(x, y, width, height, 0x3b82f6)
-      .setAlpha(0.85);
+  // ---------- Helpers ----------
 
-    this.physics.add.existing(rect, true); // static body
+  addPlatform(x, y, width, height) {
+    const rect = this.add.rectangle(x, y, width, height, 0x3b82f6).setAlpha(0.85);
+    this.physics.add.existing(rect, true);
     this.platforms.add(rect);
     return rect;
   }
 
-  spawnCoin(x, y) {
-    // Visual circle
-    const coin = this.add.circle(x, y, COIN.radius, COIN.color);
+  makePlayerTexture() {
+    if (this.textures.exists("player")) return;
 
-    // Static physics body so overlap can detect it
-    this.physics.add.existing(coin, true);
+    const size = PLAYER.radius * 2;
+    const g = this.add.graphics();
 
-    // Add to group used by overlap
-    this.coins.add(coin);
-    return coin;
+    // Outer border
+    g.lineStyle(4, 0x0f172a, 1);
+    g.strokeCircle(size / 2, size / 2, PLAYER.radius - 2);
+
+    // Fill
+    g.fillStyle(0x4fe3c1, 1);
+    g.fillCircle(size / 2, size / 2, PLAYER.radius - 4);
+
+    g.generateTexture("player", size, size);
+    g.destroy();
+  }
+
+  makeCoinTexture() {
+    if (this.textures.exists("coin")) return;
+
+    const g = this.add.graphics();
+
+    g.fillStyle(0xfbbf24, 1);
+    g.fillCircle(COIN.size / 2, COIN.size / 2, COIN.size / 2 - 2);
+
+    g.fillStyle(0xfde68a, 1);
+    g.fillCircle(COIN.size / 2 - 3, COIN.size / 2 - 3, COIN.size / 2 - 8);
+
+    g.fillStyle(0xf59e0b, 1);
+    g.fillCircle(COIN.size / 2 + 2, COIN.size / 2 + 2, 3);
+
+    g.generateTexture("coin", COIN.size, COIN.size);
+    g.destroy();
+  }
+
+  spawnAllCoins() {
+    this.coinPositions.forEach(({ x, y }) => {
+      const coin = this.coins.create(x, y, "coin");
+      const b = coin.body;
+      b.setCircle(COIN.radius);
+      b.setOffset(
+        COIN.size / 2 - COIN.radius,
+        COIN.size / 2 - COIN.radius
+      );
+      coin.refreshBody();
+    });
   }
 
   collectCoin(coin) {
-    // Prevent double-collect edge cases
-    if (!coin.active) return;
-
-    coin.destroy();
+    coin.disableBody(true, true);
 
     this.score += 10;
     this.scoreText.setText(`Score: ${this.score}`);
 
-    // Optional: if all coins collected, respawn them
     if (this.coins.countActive(true) === 0) {
-      this.time.delayedCall(400, () => this.respawnAllCoins());
+      this.time.delayedCall(400, () => {
+        this.coins.clear(true, true);
+        this.spawnAllCoins();
+      });
     }
   }
 
-  respawnAllCoins() {
-    const coinPositions = [
-      { x: 260, y: 380 },
-      { x: 520, y: 300 },
-      { x: 760, y: 220 },
-      { x: 140, y: 230 },
-      { x: 420, y: 480 },
-      { x: 860, y: 480 },
-    ];
-
-    coinPositions.forEach((p) => this.spawnCoin(p.x, p.y));
-  }
-
   respawn() {
-    const body = this.player.body;
-    this.player.x = this.spawnPoint.x;
-    this.player.y = this.spawnPoint.y;
-    body.setVelocity(0, 0);
+    this.player.setPosition(this.spawnPoint.x, this.spawnPoint.y);
+    this.player.body.setVelocity(0, 0);
   }
 
   fullReset() {
-    // Reset score
     this.score = 0;
     this.scoreText.setText("Score: 0");
-
-    // Remove existing coins
     this.coins.clear(true, true);
-
-    // Respawn coins + player
-    this.respawnAllCoins();
+    this.spawnAllCoins();
     this.respawn();
   }
 }
