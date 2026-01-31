@@ -1,10 +1,11 @@
-/* Phase 5: goal flag + win screen + restart
+/* Phase 6: Lives + Game Over screen + Try Again button
    Includes:
    - Scrolling level + camera follow
    - Coins + score
    - Forgiving jumps (coyote + buffer)
-   - Patrolling enemies (stomp or respawn)
-   - Goal flag at end: YOU WIN! then restart
+   - Patrolling enemies (stomp or lose a life)
+   - Goal flag (YOU WIN -> auto restart)
+   - Lives: start with 3. At 0 -> YOU LOSE + Try Again button
 */
 
 const GAME_WIDTH = 960;
@@ -46,10 +47,15 @@ const ENEMY = {
 };
 
 const GOAL = {
-  x: LEVEL.width - 140,  // near end of level
+  x: LEVEL.width - 140,
   y: 610,
   width: 18,
   height: 120,
+};
+
+const LIVES = {
+  start: 3,
+  invulnMs: 700, // small grace period after taking damage
 };
 
 class MainScene extends Phaser.Scene {
@@ -70,6 +76,9 @@ class MainScene extends Phaser.Scene {
     this.score = 0;
     this.scoreText = null;
 
+    this.lives = LIVES.start;
+    this.livesText = null;
+
     this.coinPositions = [];
     this.enemyData = [];
 
@@ -77,8 +86,15 @@ class MainScene extends Phaser.Scene {
     this.lastJumpPressedAt = -9999;
 
     this.isWin = false;
+    this.isGameOver = false;
+
     this.winText = null;
-    this.winBackdrop = null;
+    this.overlayBackdrop = null;
+
+    this.tryAgainButton = null;
+    this.tryAgainButtonText = null;
+
+    this.invulnerableUntil = 0;
   }
 
   create() {
@@ -91,7 +107,6 @@ class MainScene extends Phaser.Scene {
     // ---- Platforms ----
     this.platforms = this.physics.add.staticGroup();
 
-    // Ground across entire level
     this.addPlatform(LEVEL.width / 2, 680, LEVEL.width, 60);
 
     const platformData = [
@@ -106,7 +121,6 @@ class MainScene extends Phaser.Scene {
       { x: 2650, y: 440, w: 260, h: 24 },
       { x: 2950, y: 360, w: 260, h: 24 },
       { x: 3250, y: 480, w: 260, h: 24 },
-      // a couple late platforms near the end for variety
       { x: 3420, y: 420, w: 240, h: 24 },
       { x: 3520, y: 520, w: 200, h: 24 },
     ];
@@ -120,8 +134,8 @@ class MainScene extends Phaser.Scene {
 
     // ---- Player ----
     this.player = this.physics.add.sprite(this.spawnPoint.x, this.spawnPoint.y, "player");
-
     const pBody = this.player.body;
+
     pBody.setCircle(PLAYER.radius);
     pBody.setOffset(0, 0);
     pBody.setCollideWorldBounds(true);
@@ -152,7 +166,6 @@ class MainScene extends Phaser.Scene {
       { x: 1880, y: 640 },
       { x: 2520, y: 640 },
       { x: 3400, y: 640 },
-      // end stretch coins
       { x: 3420, y: 380 },
       { x: 3520, y: 480 },
     ];
@@ -174,7 +187,6 @@ class MainScene extends Phaser.Scene {
       { x: 1770, y: 420, minX: 1640, maxX: 1860 },
       { x: 2660, y: 400, minX: 2520, maxX: 2780 },
       { x: 3200, y: 640, minX: 3050, maxX: 3350 },
-      // late enemy near end
       { x: 3450, y: 640, minX: 3360, maxX: 3560 },
     ];
 
@@ -192,18 +204,10 @@ class MainScene extends Phaser.Scene {
     );
 
     // ---- Goal Flag ----
-    // A flag pole (static body) near the end
     this.goal = this.physics.add.staticSprite(GOAL.x, GOAL.y, "flag");
     this.goal.refreshBody();
 
-    // Trigger win on overlap
-    this.physics.add.overlap(
-      this.player,
-      this.goal,
-      () => this.winLevel(),
-      null,
-      this
-    );
+    this.physics.add.overlap(this.player, this.goal, () => this.winLevel(), null, this);
 
     // ---- Input ----
     this.cursors = this.input.keyboard.createCursorKeys();
@@ -215,8 +219,10 @@ class MainScene extends Phaser.Scene {
       SPACE: Phaser.Input.Keyboard.KeyCodes.SPACE,
     });
 
-    // ---- Score UI ----
+    // ---- UI ----
     this.score = 0;
+    this.lives = LIVES.start;
+
     this.scoreText = this.add
       .text(12, 12, "Score: 0", {
         fontSize: "18px",
@@ -225,17 +231,25 @@ class MainScene extends Phaser.Scene {
       })
       .setScrollFactor(0);
 
-    // R still resets (handy for testing)
+    this.livesText = this.add
+      .text(12, 36, `Lives: ${this.lives}`, {
+        fontSize: "18px",
+        color: "#e5e7eb",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+      })
+      .setScrollFactor(0);
+
+    // R reset (for testing)
     this.keys.R.on("down", () => this.fullReset());
 
-    // ---- Win overlay (hidden until win) ----
-    this.winBackdrop = this.add
+    // ---- Overlay + Button (hidden until win/lose) ----
+    this.overlayBackdrop = this.add
       .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55)
       .setScrollFactor(0)
       .setVisible(false);
 
     this.winText = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, "YOU WIN!", {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, "", {
         fontSize: "52px",
         color: "#ffffff",
         fontStyle: "800",
@@ -244,13 +258,44 @@ class MainScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setVisible(false);
+
+    // Button (rectangle + text)
+    this.tryAgainButton = this.add
+      .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 55, 260, 56, 0x2563eb, 1)
+      .setScrollFactor(0)
+      .setVisible(false)
+      .setInteractive({ useHandCursor: true });
+
+    this.tryAgainButtonText = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 55, "Try Again", {
+        fontSize: "22px",
+        color: "#ffffff",
+        fontStyle: "700",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setVisible(false);
+
+    // Hover effects
+    this.tryAgainButton.on("pointerover", () => {
+      if (!this.tryAgainButton.visible) return;
+      this.tryAgainButton.setFillStyle(0x1d4ed8, 1);
+    });
+    this.tryAgainButton.on("pointerout", () => {
+      if (!this.tryAgainButton.visible) return;
+      this.tryAgainButton.setFillStyle(0x2563eb, 1);
+    });
+
+    // Click
+    this.tryAgainButton.on("pointerdown", () => {
+      if (!this.isGameOver) return;
+      this.fullReset();
+    });
   }
 
   update(time) {
-    if (this.isWin) {
-      // freeze input/movement after win
-      return;
-    }
+    if (this.isWin || this.isGameOver) return;
 
     const body = this.player.body;
 
@@ -283,9 +328,9 @@ class MainScene extends Phaser.Scene {
       this.lastJumpPressedAt = -9999;
     }
 
-    // Fell off world
+    // Fell off world -> lose a life
     if (this.player.y > WORLD.killY) {
-      this.respawn();
+      this.loseLife(time);
     }
 
     // Enemy patrol
@@ -363,15 +408,12 @@ class MainScene extends Phaser.Scene {
 
     const g = this.add.graphics();
 
-    // pole
     g.fillStyle(0xe5e7eb, 1);
     g.fillRoundedRect(w / 2 - 3, 0, 6, h, 3);
 
-    // flag cloth
     g.fillStyle(0x22c55e, 1);
     g.fillTriangle(w / 2 + 3, 12, w / 2 + 3, 44, w - 2, 28);
 
-    // little accent
     g.fillStyle(0x16a34a, 1);
     g.fillTriangle(w / 2 + 6, 16, w / 2 + 6, 40, w - 6, 28);
 
@@ -393,7 +435,7 @@ class MainScene extends Phaser.Scene {
   }
 
   collectCoin(coin) {
-    if (this.isWin) return;
+    if (this.isWin || this.isGameOver) return;
 
     coin.disableBody(true, true);
 
@@ -402,7 +444,7 @@ class MainScene extends Phaser.Scene {
 
     if (this.coins.countActive(true) === 0) {
       this.time.delayedCall(450, () => {
-        if (this.isWin) return;
+        if (this.isWin || this.isGameOver) return;
         this.coins.clear(true, true);
         this.spawnAllCoins();
       });
@@ -449,10 +491,14 @@ class MainScene extends Phaser.Scene {
   }
 
   handlePlayerEnemyCollision(enemy) {
-    if (this.isWin) return;
+    if (this.isWin || this.isGameOver) return;
+
+    const time = this.time.now;
+
+    // invulnerability window
+    if (time < this.invulnerableUntil) return;
 
     const pBody = this.player.body;
-
     const playerFalling = pBody.velocity.y > 0;
     const playerAboveEnemy = this.player.y < enemy.y - 6;
 
@@ -466,13 +512,74 @@ class MainScene extends Phaser.Scene {
       return;
     }
 
-    // damage
+    // damage -> lose a life
+    this.loseLife(time);
+  }
+
+  // ---------- Lives / Lose ----------
+  loseLife(nowMs) {
+    if (this.isWin || this.isGameOver) return;
+
+    // Prevent rapid multi-loss (falling / repeated collision frames)
+    if (nowMs < this.invulnerableUntil) return;
+
+    this.lives -= 1;
+    this.livesText.setText(`Lives: ${this.lives}`);
+
+    if (this.lives <= 0) {
+      this.gameOver();
+      return;
+    }
+
+    // brief invulnerability + visual blink
+    this.invulnerableUntil = nowMs + LIVES.invulnMs;
+    this.flashPlayerInvuln();
+
+    // respawn
     this.respawn();
+  }
+
+  flashPlayerInvuln() {
+    // Quick blink effect
+    this.tweens.killTweensOf(this.player);
+    this.player.setAlpha(1);
+
+    this.tweens.add({
+      targets: this.player,
+      alpha: 0.25,
+      duration: 90,
+      yoyo: true,
+      repeat: 6,
+      onComplete: () => this.player.setAlpha(1),
+    });
+  }
+
+  gameOver() {
+    this.isGameOver = true;
+
+    // Stop player movement
+    this.player.body.setVelocity(0, 0);
+    this.player.body.moves = false;
+
+    // Stop enemies
+    this.enemies.children.iterate((enemy) => {
+      if (!enemy || !enemy.active) return;
+      enemy.body.setVelocity(0, 0);
+      enemy.body.moves = false;
+    });
+
+    // Show overlay + button
+    this.overlayBackdrop.setVisible(true);
+    this.winText.setText("YOU LOSE");
+    this.winText.setVisible(true);
+
+    this.tryAgainButton.setVisible(true);
+    this.tryAgainButtonText.setVisible(true);
   }
 
   // ---------- Goal / Win ----------
   winLevel() {
-    if (this.isWin) return;
+    if (this.isWin || this.isGameOver) return;
 
     this.isWin = true;
 
@@ -487,11 +594,15 @@ class MainScene extends Phaser.Scene {
       enemy.body.moves = false;
     });
 
-    // Show overlay
-    this.winBackdrop.setVisible(true);
+    this.overlayBackdrop.setVisible(true);
+    this.winText.setText("YOU WIN!");
     this.winText.setVisible(true);
 
-    // Restart after short delay
+    // hide button on win
+    this.tryAgainButton.setVisible(false);
+    this.tryAgainButtonText.setVisible(false);
+
+    // restart automatically after short delay
     this.time.delayedCall(2000, () => {
       this.fullReset();
       this.isWin = false;
@@ -505,21 +616,27 @@ class MainScene extends Phaser.Scene {
   }
 
   fullReset() {
-    // Re-enable movement (in case we won)
+    // Clear states
+    this.isGameOver = false;
+    this.isWin = false;
+    this.invulnerableUntil = 0;
+
+    // Re-enable movement
     this.player.body.moves = true;
+    this.player.setAlpha(1);
 
-    this.enemies.children.iterate((enemy) => {
-      if (!enemy) return;
-      if (enemy.body) enemy.body.moves = true;
-    });
+    // Hide overlay + button
+    this.overlayBackdrop.setVisible(false);
+    this.winText.setVisible(false);
 
-    // Hide win overlay
-    if (this.winBackdrop) this.winBackdrop.setVisible(false);
-    if (this.winText) this.winText.setVisible(false);
+    this.tryAgainButton.setVisible(false);
+    this.tryAgainButtonText.setVisible(false);
 
-    // Reset score
+    // Reset score/lives
     this.score = 0;
+    this.lives = LIVES.start;
     this.scoreText.setText("Score: 0");
+    this.livesText.setText(`Lives: ${this.lives}`);
 
     // Reset coins
     this.coins.clear(true, true);
@@ -532,7 +649,7 @@ class MainScene extends Phaser.Scene {
     // Respawn player
     this.respawn();
 
-    // Snap camera back near start quickly (feels better after win)
+    // Reset camera to start
     this.cameras.main.stopFollow();
     this.cameras.main.scrollX = 0;
     this.cameras.main.scrollY = 0;
