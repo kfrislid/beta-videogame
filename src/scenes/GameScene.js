@@ -110,11 +110,12 @@ export class GameScene extends Phaser.Scene {
 
     this.physics.add.overlap(this.player, this.checkpoints, (player, cp) => {
       if (this.state.mode !== Mode.PLAY) return;
-      // Only trigger if not already active
       if (cp.getData("active")) return;
+    
       setCheckpointActive(this.checkpoints, cp);
+      this.ui.toast("Checkpoint saved!", 900);
     });
-
+    
     // Coins
     this.coins = createCoins(this, this.level.coins);
     this.physics.add.overlap(this.player, this.coins, (player, coin) => {
