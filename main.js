@@ -1,17 +1,23 @@
-/* Phase 2.5: circle player with outline + coins + score */
+/* Phase 3: scrolling level + camera follow + coins + score + circle player */
 
 const GAME_WIDTH = 960;
 const GAME_HEIGHT = 540;
 
+// Wider world for scrolling
+const LEVEL = {
+  width: 3600,
+  height: 720,
+};
+
 const PLAYER = {
   radius: 18,
-  moveSpeed: 220,
-  jumpSpeed: 420,
+  moveSpeed: 240,
+  jumpSpeed: 450,
 };
 
 const WORLD = {
-  gravityY: 900,
-  killY: 650,
+  gravityY: 950,
+  killY: 780, // below level = respawn
 };
 
 const COIN = {
@@ -30,38 +36,55 @@ class MainScene extends Phaser.Scene {
     this.cursors = null;
     this.keys = null;
 
-    this.spawnPoint = { x: 120, y: 420 };
+    this.spawnPoint = { x: 120, y: 520 };
 
     this.score = 0;
     this.scoreText = null;
 
-    this.coinPositions = [
-      { x: 260, y: 380 },
-      { x: 520, y: 300 },
-      { x: 760, y: 220 },
-      { x: 140, y: 230 },
-      { x: 420, y: 480 },
-      { x: 860, y: 480 },
-    ];
+    this.coinPositions = [];
   }
 
   create() {
+    // Background
     this.cameras.main.setBackgroundColor("#1b1f2a");
+
+    // Physics gravity
     this.physics.world.gravity.y = WORLD.gravityY;
+
+    // World bounds (IMPORTANT for scrolling + camera)
+    this.physics.world.setBounds(0, 0, LEVEL.width, LEVEL.height);
+
+    // Camera bounds so it doesn’t scroll beyond the world
+    this.cameras.main.setBounds(0, 0, LEVEL.width, LEVEL.height);
 
     // ---- Platforms ----
     this.platforms = this.physics.add.staticGroup();
-    this.addPlatform(480, 520, 960, 40);
-    this.addPlatform(260, 420, 240, 24);
-    this.addPlatform(520, 340, 240, 24);
-    this.addPlatform(760, 260, 220, 24);
-    this.addPlatform(140, 270, 180, 24);
+
+    // Ground: long strip across the whole level
+    this.addPlatform(LEVEL.width / 2, 680, LEVEL.width, 60);
+
+    // A bunch of platforms sprinkled throughout the level
+    const platformData = [
+      { x: 350, y: 560, w: 240, h: 24 },
+      { x: 650, y: 480, w: 240, h: 24 },
+      { x: 980, y: 420, w: 260, h: 24 },
+      { x: 1250, y: 520, w: 220, h: 24 },
+      { x: 1500, y: 360, w: 260, h: 24 },
+      { x: 1750, y: 460, w: 240, h: 24 },
+      { x: 2050, y: 400, w: 260, h: 24 },
+      { x: 2350, y: 520, w: 260, h: 24 },
+      { x: 2650, y: 440, w: 260, h: 24 },
+      { x: 2950, y: 360, w: 260, h: 24 },
+      { x: 3250, y: 480, w: 260, h: 24 },
+    ];
+
+    platformData.forEach((p) => this.addPlatform(p.x, p.y, p.w, p.h));
 
     // ---- Textures ----
     this.makePlayerTexture();
     this.makeCoinTexture();
 
-    // ---- Player (circle sprite) ----
+    // ---- Player (circle sprite with arcade body) ----
     this.player = this.physics.add.sprite(
       this.spawnPoint.x,
       this.spawnPoint.y,
@@ -72,12 +95,41 @@ class MainScene extends Phaser.Scene {
     body.setCircle(PLAYER.radius);
     body.setOffset(0, 0);
     body.setCollideWorldBounds(true);
-    body.setMaxVelocity(400, 900);
-    body.setDragX(900);
+    body.setMaxVelocity(500, 1000);
+    body.setDragX(1100);
 
     this.physics.add.collider(this.player, this.platforms);
 
+    // ---- Camera follow ----
+    // Start following the player with a little smoothing (lerp)
+    this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
+
+    // Optional: small “deadzone” so camera doesn’t move on tiny player motions
+    this.cameras.main.setDeadzone(200, 120);
+
     // ---- Coins ----
+    // Place coins near platforms across the larger level
+    this.coinPositions = [
+      { x: 350, y: 520 },
+      { x: 650, y: 440 },
+      { x: 980, y: 380 },
+      { x: 1250, y: 480 },
+      { x: 1500, y: 320 },
+      { x: 1750, y: 420 },
+      { x: 2050, y: 360 },
+      { x: 2350, y: 480 },
+      { x: 2650, y: 400 },
+      { x: 2950, y: 320 },
+      { x: 3250, y: 440 },
+
+      // a few ground coins for variety
+      { x: 520, y: 640 },
+      { x: 1120, y: 640 },
+      { x: 1880, y: 640 },
+      { x: 2520, y: 640 },
+      { x: 3400, y: 640 },
+    ];
+
     this.coins = this.physics.add.staticGroup();
     this.spawnAllCoins();
 
@@ -99,14 +151,17 @@ class MainScene extends Phaser.Scene {
       SPACE: Phaser.Input.Keyboard.KeyCodes.SPACE,
     });
 
-    // ---- Score ----
+    // ---- Score UI (fixed to screen) ----
     this.score = 0;
-    this.scoreText = this.add.text(12, 12, "Score: 0", {
-      fontSize: "18px",
-      color: "#e5e7eb",
-      fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
-    });
+    this.scoreText = this.add
+      .text(12, 12, "Score: 0", {
+        fontSize: "18px",
+        color: "#e5e7eb",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+      })
+      .setScrollFactor(0); // stays on screen while camera moves
 
+    // Reset
     this.keys.R.on("down", () => this.fullReset());
   }
 
@@ -128,6 +183,7 @@ class MainScene extends Phaser.Scene {
       body.setVelocityY(-PLAYER.jumpSpeed);
     }
 
+    // Fell off the world => respawn (score stays)
     if (this.player.y > WORLD.killY) {
       this.respawn();
     }
@@ -137,7 +193,7 @@ class MainScene extends Phaser.Scene {
 
   addPlatform(x, y, width, height) {
     const rect = this.add.rectangle(x, y, width, height, 0x3b82f6).setAlpha(0.85);
-    this.physics.add.existing(rect, true);
+    this.physics.add.existing(rect, true); // static body
     this.platforms.add(rect);
     return rect;
   }
@@ -148,7 +204,7 @@ class MainScene extends Phaser.Scene {
     const size = PLAYER.radius * 2;
     const g = this.add.graphics();
 
-    // Outer border
+    // Border
     g.lineStyle(4, 0x0f172a, 1);
     g.strokeCircle(size / 2, size / 2, PLAYER.radius - 2);
 
@@ -182,12 +238,11 @@ class MainScene extends Phaser.Scene {
     this.coinPositions.forEach(({ x, y }) => {
       const coin = this.coins.create(x, y, "coin");
       const b = coin.body;
+
       b.setCircle(COIN.radius);
-      b.setOffset(
-        COIN.size / 2 - COIN.radius,
-        COIN.size / 2 - COIN.radius
-      );
-      coin.refreshBody();
+      b.setOffset(COIN.size / 2 - COIN.radius, COIN.size / 2 - COIN.radius);
+
+      coin.refreshBody(); // important for static bodies
     });
   }
 
@@ -197,8 +252,9 @@ class MainScene extends Phaser.Scene {
     this.score += 10;
     this.scoreText.setText(`Score: ${this.score}`);
 
+    // If all collected, respawn after a short delay
     if (this.coins.countActive(true) === 0) {
-      this.time.delayedCall(400, () => {
+      this.time.delayedCall(450, () => {
         this.coins.clear(true, true);
         this.spawnAllCoins();
       });
@@ -208,13 +264,18 @@ class MainScene extends Phaser.Scene {
   respawn() {
     this.player.setPosition(this.spawnPoint.x, this.spawnPoint.y);
     this.player.body.setVelocity(0, 0);
+
+    // Optional: snap camera back if you want respawn to “feel immediate”
+    // this.cameras.main.pan(this.player.x, this.player.y, 150);
   }
 
   fullReset() {
     this.score = 0;
     this.scoreText.setText("Score: 0");
+
     this.coins.clear(true, true);
     this.spawnAllCoins();
+
     this.respawn();
   }
 }
