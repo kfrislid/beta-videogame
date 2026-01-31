@@ -1,7 +1,10 @@
-/* Phase 4: scrolling level + coins + score + forgiving jumps + simple patrolling enemies
-   - Enemies patrol back/forth
-   - Touch enemy from side => respawn
-   - Stomp enemy from above => enemy removed + points
+/* Phase 5: goal flag + win screen + restart
+   Includes:
+   - Scrolling level + camera follow
+   - Coins + score
+   - Forgiving jumps (coyote + buffer)
+   - Patrolling enemies (stomp or respawn)
+   - Goal flag at end: YOU WIN! then restart
 */
 
 const GAME_WIDTH = 960;
@@ -31,14 +34,22 @@ const FEEL = {
 const COIN = {
   size: 24,
   radius: 10,
+  points: 10,
 };
 
 const ENEMY = {
-  size: 34,          // texture size
-  bodyRadius: 14,    // physics circle
-  speed: 90,         // patrol speed
-  stompBounce: 320,  // little hop after stomping
+  size: 34,
+  bodyRadius: 14,
+  speed: 90,
+  stompBounce: 320,
   points: 50,
+};
+
+const GOAL = {
+  x: LEVEL.width - 140,  // near end of level
+  y: 610,
+  width: 18,
+  height: 120,
 };
 
 class MainScene extends Phaser.Scene {
@@ -49,6 +60,7 @@ class MainScene extends Phaser.Scene {
     this.platforms = null;
     this.coins = null;
     this.enemies = null;
+    this.goal = null;
 
     this.cursors = null;
     this.keys = null;
@@ -63,6 +75,10 @@ class MainScene extends Phaser.Scene {
 
     this.lastOnGroundAt = 0;
     this.lastJumpPressedAt = -9999;
+
+    this.isWin = false;
+    this.winText = null;
+    this.winBackdrop = null;
   }
 
   create() {
@@ -70,7 +86,6 @@ class MainScene extends Phaser.Scene {
 
     this.physics.world.gravity.y = WORLD.gravityY;
     this.physics.world.setBounds(0, 0, LEVEL.width, LEVEL.height);
-
     this.cameras.main.setBounds(0, 0, LEVEL.width, LEVEL.height);
 
     // ---- Platforms ----
@@ -91,6 +106,9 @@ class MainScene extends Phaser.Scene {
       { x: 2650, y: 440, w: 260, h: 24 },
       { x: 2950, y: 360, w: 260, h: 24 },
       { x: 3250, y: 480, w: 260, h: 24 },
+      // a couple late platforms near the end for variety
+      { x: 3420, y: 420, w: 240, h: 24 },
+      { x: 3520, y: 520, w: 200, h: 24 },
     ];
     platformData.forEach((p) => this.addPlatform(p.x, p.y, p.w, p.h));
 
@@ -98,6 +116,7 @@ class MainScene extends Phaser.Scene {
     this.makePlayerTexture();
     this.makeCoinTexture();
     this.makeEnemyTexture();
+    this.makeFlagTexture();
 
     // ---- Player ----
     this.player = this.physics.add.sprite(this.spawnPoint.x, this.spawnPoint.y, "player");
@@ -133,6 +152,9 @@ class MainScene extends Phaser.Scene {
       { x: 1880, y: 640 },
       { x: 2520, y: 640 },
       { x: 3400, y: 640 },
+      // end stretch coins
+      { x: 3420, y: 380 },
+      { x: 3520, y: 480 },
     ];
 
     this.coins = this.physics.add.staticGroup();
@@ -147,25 +169,38 @@ class MainScene extends Phaser.Scene {
     );
 
     // ---- Enemies ----
-    // Each enemy has a patrol range [minX, maxX]
     this.enemyData = [
-      { x: 700, y: 440, minX: 580, maxX: 760 },      // on platform around x=650
-      { x: 1770, y: 420, minX: 1640, maxX: 1860 },   // on platform around x=1750
-      { x: 2660, y: 400, minX: 2520, maxX: 2780 },   // on platform around x=2650
-      { x: 3200, y: 640, minX: 3050, maxX: 3350 },   // ground patrol
+      { x: 700, y: 440, minX: 580, maxX: 760 },
+      { x: 1770, y: 420, minX: 1640, maxX: 1860 },
+      { x: 2660, y: 400, minX: 2520, maxX: 2780 },
+      { x: 3200, y: 640, minX: 3050, maxX: 3350 },
+      // late enemy near end
+      { x: 3450, y: 640, minX: 3360, maxX: 3560 },
     ];
 
     this.enemies = this.physics.add.group();
     this.spawnAllEnemies();
 
-    // Enemies collide with platforms so they stay on ground/ledges
     this.physics.add.collider(this.enemies, this.platforms);
 
-    // Player <> enemy interaction
     this.physics.add.collider(
       this.player,
       this.enemies,
       (player, enemy) => this.handlePlayerEnemyCollision(enemy),
+      null,
+      this
+    );
+
+    // ---- Goal Flag ----
+    // A flag pole (static body) near the end
+    this.goal = this.physics.add.staticSprite(GOAL.x, GOAL.y, "flag");
+    this.goal.refreshBody();
+
+    // Trigger win on overlap
+    this.physics.add.overlap(
+      this.player,
+      this.goal,
+      () => this.winLevel(),
       null,
       this
     );
@@ -190,13 +225,35 @@ class MainScene extends Phaser.Scene {
       })
       .setScrollFactor(0);
 
+    // R still resets (handy for testing)
     this.keys.R.on("down", () => this.fullReset());
+
+    // ---- Win overlay (hidden until win) ----
+    this.winBackdrop = this.add
+      .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55)
+      .setScrollFactor(0)
+      .setVisible(false);
+
+    this.winText = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, "YOU WIN!", {
+        fontSize: "52px",
+        color: "#ffffff",
+        fontStyle: "800",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setVisible(false);
   }
 
   update(time) {
+    if (this.isWin) {
+      // freeze input/movement after win
+      return;
+    }
+
     const body = this.player.body;
 
-    // Track ground time for coyote time
     if (body.blocked.down) {
       this.lastOnGroundAt = time;
     }
@@ -208,7 +265,7 @@ class MainScene extends Phaser.Scene {
     if (left) body.setVelocityX(-PLAYER.moveSpeed);
     else if (right) body.setVelocityX(PLAYER.moveSpeed);
 
-    // Jump buffer
+    // Jump buffer + coyote time
     const jumpJustPressed =
       Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
       Phaser.Input.Keyboard.JustDown(this.keys.W) ||
@@ -231,7 +288,7 @@ class MainScene extends Phaser.Scene {
       this.respawn();
     }
 
-    // Enemy patrol AI
+    // Enemy patrol
     this.updateEnemies();
   }
 
@@ -284,20 +341,41 @@ class MainScene extends Phaser.Scene {
     const s = ENEMY.size;
     const g = this.add.graphics();
 
-    // body
     g.fillStyle(0xef4444, 1);
     g.fillRoundedRect(2, 6, s - 4, s - 10, 8);
 
-    // eyes
     g.fillStyle(0x111827, 1);
     g.fillCircle(s / 2 - 6, s / 2, 3);
     g.fillCircle(s / 2 + 6, s / 2, 3);
 
-    // tiny highlight
     g.fillStyle(0xfca5a5, 1);
     g.fillCircle(s / 2 - 9, s / 2 - 6, 3);
 
     g.generateTexture("enemy", s, s);
+    g.destroy();
+  }
+
+  makeFlagTexture() {
+    if (this.textures.exists("flag")) return;
+
+    const w = GOAL.width;
+    const h = GOAL.height;
+
+    const g = this.add.graphics();
+
+    // pole
+    g.fillStyle(0xe5e7eb, 1);
+    g.fillRoundedRect(w / 2 - 3, 0, 6, h, 3);
+
+    // flag cloth
+    g.fillStyle(0x22c55e, 1);
+    g.fillTriangle(w / 2 + 3, 12, w / 2 + 3, 44, w - 2, 28);
+
+    // little accent
+    g.fillStyle(0x16a34a, 1);
+    g.fillTriangle(w / 2 + 6, 16, w / 2 + 6, 40, w - 6, 28);
+
+    g.generateTexture("flag", w, h);
     g.destroy();
   }
 
@@ -315,13 +393,16 @@ class MainScene extends Phaser.Scene {
   }
 
   collectCoin(coin) {
+    if (this.isWin) return;
+
     coin.disableBody(true, true);
 
-    this.score += 10;
+    this.score += COIN.points;
     this.scoreText.setText(`Score: ${this.score}`);
 
     if (this.coins.countActive(true) === 0) {
       this.time.delayedCall(450, () => {
+        if (this.isWin) return;
         this.coins.clear(true, true);
         this.spawnAllCoins();
       });
@@ -335,14 +416,15 @@ class MainScene extends Phaser.Scene {
 
       enemy.setData("minX", e.minX);
       enemy.setData("maxX", e.maxX);
-      enemy.setData("dir", 1); // 1 = right, -1 = left
+      enemy.setData("dir", 1);
 
       enemy.body.setCircle(ENEMY.bodyRadius);
-      // Center the circle in the texture
-      enemy.body.setOffset(ENEMY.size / 2 - ENEMY.bodyRadius, ENEMY.size / 2 - ENEMY.bodyRadius);
+      enemy.body.setOffset(
+        ENEMY.size / 2 - ENEMY.bodyRadius,
+        ENEMY.size / 2 - ENEMY.bodyRadius
+      );
 
       enemy.body.setCollideWorldBounds(true);
-      enemy.body.setImmovable(false);
       enemy.body.setAllowGravity(true);
 
       enemy.setVelocityX(ENEMY.speed);
@@ -357,52 +439,85 @@ class MainScene extends Phaser.Scene {
       const maxX = enemy.getData("maxX");
       let dir = enemy.getData("dir");
 
-      // Turn around at patrol edges
       if (enemy.x <= minX) dir = 1;
       if (enemy.x >= maxX) dir = -1;
 
       enemy.setData("dir", dir);
       enemy.setVelocityX(dir * ENEMY.speed);
-
-      // Flip visually (optional)
       enemy.setFlipX(dir < 0);
     });
   }
 
   handlePlayerEnemyCollision(enemy) {
-    // If player is falling and hits enemy from above => stomp
+    if (this.isWin) return;
+
     const pBody = this.player.body;
-    const eBody = enemy.body;
 
     const playerFalling = pBody.velocity.y > 0;
     const playerAboveEnemy = this.player.y < enemy.y - 6;
 
     if (playerFalling && playerAboveEnemy) {
-      // Stomp!
+      // stomp
       enemy.disableBody(true, true);
-
-      // Bounce up a bit
       pBody.setVelocityY(-ENEMY.stompBounce);
 
-      // Score
       this.score += ENEMY.points;
       this.scoreText.setText(`Score: ${this.score}`);
       return;
     }
 
-    // Otherwise: "damage" => respawn
+    // damage
     this.respawn();
+  }
+
+  // ---------- Goal / Win ----------
+  winLevel() {
+    if (this.isWin) return;
+
+    this.isWin = true;
+
+    // Stop movement
+    this.player.body.setVelocity(0, 0);
+    this.player.body.moves = false;
+
+    // Stop enemies
+    this.enemies.children.iterate((enemy) => {
+      if (!enemy || !enemy.active) return;
+      enemy.body.setVelocity(0, 0);
+      enemy.body.moves = false;
+    });
+
+    // Show overlay
+    this.winBackdrop.setVisible(true);
+    this.winText.setVisible(true);
+
+    // Restart after short delay
+    this.time.delayedCall(2000, () => {
+      this.fullReset();
+      this.isWin = false;
+    });
   }
 
   // ---------- Respawn / Reset ----------
   respawn() {
     this.player.setPosition(this.spawnPoint.x, this.spawnPoint.y);
     this.player.body.setVelocity(0, 0);
-
-    // Small optional invulnerability window could be added later
   }
 
   fullReset() {
+    // Re-enable movement (in case we won)
+    this.player.body.moves = true;
+
+    this.enemies.children.iterate((enemy) => {
+      if (!enemy) return;
+      if (enemy.body) enemy.body.moves = true;
+    });
+
+    // Hide win overlay
+    if (this.winBackdrop) this.winBackdrop.setVisible(false);
+    if (this.winText) this.winText.setVisible(false);
+
+    // Reset score
     this.score = 0;
     this.scoreText.setText("Score: 0");
 
@@ -414,7 +529,14 @@ class MainScene extends Phaser.Scene {
     this.enemies.clear(true, true);
     this.spawnAllEnemies();
 
+    // Respawn player
     this.respawn();
+
+    // Snap camera back near start quickly (feels better after win)
+    this.cameras.main.stopFollow();
+    this.cameras.main.scrollX = 0;
+    this.cameras.main.scrollY = 0;
+    this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
   }
 }
 
