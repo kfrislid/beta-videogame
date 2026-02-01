@@ -72,6 +72,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
+      // IMPORTANT: scene.restart() reuses this scene instance, so reset state each time
+    this.physics.world.resume();
+    this.state.mode = Mode.PLAY;
+    this.state.invulnerableUntil = 0;
+    this.state.lastOnGroundAt = 0;
+    this.state.lastJumpPressedAt = -9999;
+    
     ensureTextures(this);
 
     this.level = LEVELS[this.levelIndex];
@@ -272,6 +279,11 @@ export class GameScene extends Phaser.Scene {
 
   loadLevel(index) {
     this.levelIndex = index;
+
+     // Safety: ensure we are not carrying "paused world" into next level
+    this.physics.world.resume();
+    this.state.mode = Mode.PLAY;
+
     this.scene.restart(); // rebuild scene using the new levelIndex
   }
   
