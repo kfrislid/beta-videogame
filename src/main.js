@@ -1,3 +1,4 @@
+import { HomeScene } from "./scenes/HomeScene.js";
 import { GameScene } from "./scenes/GameScene.js";
 
 const Phaser = window.Phaser;
@@ -14,7 +15,8 @@ const config = {
       gravity: { y: 850 },
     },
   },
-  scene: [GameScene],
+  // Home first, then Game
+  scene: [HomeScene, GameScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
