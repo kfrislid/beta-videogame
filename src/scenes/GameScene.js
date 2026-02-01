@@ -304,6 +304,17 @@ export class GameScene extends Phaser.Scene {
     this.scene.start("HomeScene");
   }
 
+  nextLevel() {
+    const nextIndex = this.levelIndex + 1;
+  
+    if (nextIndex < LEVELS.length) {
+      this.loadLevel(nextIndex);
+    } else {
+      // If no more levels, loop back to Level 1 (or change to a "You Beat The Game" screen later)
+      this.loadLevel(0);
+    }
+  }
+
   fullReset() {
     this.physics.world.resume();
 
