@@ -249,21 +249,32 @@ export class GameScene extends Phaser.Scene {
 
   win() {
     this.state.mode = Mode.WIN;
-
+  
     this.physics.world.pause();
     setPlayerFrozen(this.player, true);
     this.enemies.children.iterate((e) => e?.body && (e.body.moves = false));
-
+  
     this.ui.showOverlay({
       title: "YOU WIN!",
       showButton: false,
     });
-
-    this.time.delayedCall(2000, () => {
-      this.fullReset();
+  
+    this.time.delayedCall(1400, () => {
+      const nextIndex = this.levelIndex + 1;
+  
+      if (nextIndex < LEVELS.length) {
+        this.loadLevel(nextIndex); // go to Level 2, Level 3, etc.
+      } else {
+        this.loadLevel(0); // loop back to Level 1 when finished
+      }
     });
   }
 
+  loadLevel(index) {
+    this.levelIndex = index;
+    this.scene.restart(); // rebuild scene using the new levelIndex
+  }
+  
   fullReset() {
     this.physics.world.resume();
 
