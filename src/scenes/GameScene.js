@@ -267,7 +267,7 @@ export class GameScene extends Phaser.Scene {
   
     this.ui.showOverlay({
       title: "YOU WIN!",
-      showTryAgain: false,
+      overlayMode: "win",
       showHome: true,
     });
   
