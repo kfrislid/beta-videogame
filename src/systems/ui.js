@@ -1,18 +1,22 @@
-export function createUI(scene, { onTryAgain }) {
+export function createUI(scene, { onTryAgain, onHome }) {
   const w = scene.scale.width;
   const h = scene.scale.height;
 
-  const scoreText = scene.add.text(12, 12, "Score: 0", {
-    fontSize: "18px",
-    color: "#e5e7eb",
-    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
-  }).setScrollFactor(0);
+  const scoreText = scene.add
+    .text(12, 12, "Score: 0", {
+      fontSize: "18px",
+      color: "#e5e7eb",
+      fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    })
+    .setScrollFactor(0);
 
-  const livesText = scene.add.text(12, 36, "Lives: 3", {
-    fontSize: "18px",
-    color: "#e5e7eb",
-    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
-  }).setScrollFactor(0);
+  const livesText = scene.add
+    .text(12, 36, "Lives: 3", {
+      fontSize: "18px",
+      color: "#e5e7eb",
+      fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    })
+    .setScrollFactor(0);
 
   // ---- Toast (top-center) ----
   const toastBg = scene.add
@@ -34,7 +38,6 @@ export function createUI(scene, { onTryAgain }) {
   let toastTween = null;
 
   function showToast(message, durationMs = 1100) {
-    // Kill any existing tween so the toast can restart cleanly
     if (toastTween) {
       toastTween.stop();
       toastTween = null;
@@ -47,13 +50,11 @@ export function createUI(scene, { onTryAgain }) {
     toastBg.setVisible(true);
     toastText.setVisible(true);
 
-    // Fade in
     scene.tweens.add({
       targets: [toastBg, toastText],
       alpha: 1,
       duration: 140,
       onComplete: () => {
-        // Hold then fade out
         toastTween = scene.tweens.add({
           targets: [toastBg, toastText],
           alpha: 0,
@@ -75,59 +76,109 @@ export function createUI(scene, { onTryAgain }) {
     .setScrollFactor(0)
     .setVisible(false);
 
-  const title = scene.add.text(w / 2, h / 2 - 40, "", {
-    fontSize: "52px",
-    color: "#ffffff",
-    fontStyle: "800",
-    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
-  }).setOrigin(0.5).setScrollFactor(0).setVisible(false);
+  const title = scene.add
+    .text(w / 2, h / 2 - 90, "", {
+      fontSize: "52px",
+      color: "#ffffff",
+      fontStyle: "800",
+      fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    })
+    .setOrigin(0.5)
+    .setScrollFactor(0)
+    .setVisible(false);
 
-  const button = scene.add
-    .rectangle(w / 2, h / 2 + 55, 260, 56, 0x2563eb, 1)
+  // Primary button: Try Again (blue)
+  const tryBtn = scene.add
+    .rectangle(w / 2, h / 2 + 10, 260, 56, 0x2563eb, 1)
     .setScrollFactor(0)
     .setVisible(false)
     .setInteractive({ useHandCursor: true });
 
-  const buttonText = scene.add.text(w / 2, h / 2 + 55, "Try Again", {
-    fontSize: "22px",
-    color: "#ffffff",
-    fontStyle: "700",
-    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
-  }).setOrigin(0.5).setScrollFactor(0).setVisible(false);
+  const tryBtnText = scene.add
+    .text(w / 2, h / 2 + 10, "Try Again", {
+      fontSize: "22px",
+      color: "#ffffff",
+      fontStyle: "700",
+      fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    })
+    .setOrigin(0.5)
+    .setScrollFactor(0)
+    .setVisible(false);
 
-  button.on("pointerover", () => {
-    if (!button.visible) return;
-    button.setFillStyle(0x1d4ed8, 1);
+  // Secondary button: Home (dark)
+  const homeBtn = scene.add
+    .rectangle(w / 2, h / 2 + 80, 260, 56, 0x111827, 1)
+    .setScrollFactor(0)
+    .setVisible(false)
+    .setInteractive({ useHandCursor: true });
+
+  const homeBtnText = scene.add
+    .text(w / 2, h / 2 + 80, "Back to Home", {
+      fontSize: "20px",
+      color: "#ffffff",
+      fontStyle: "700",
+      fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    })
+    .setOrigin(0.5)
+    .setScrollFactor(0)
+    .setVisible(false);
+
+  // Hover effects
+  tryBtn.on("pointerover", () => {
+    if (!tryBtn.visible) return;
+    tryBtn.setFillStyle(0x1d4ed8, 1);
   });
-  button.on("pointerout", () => {
-    if (!button.visible) return;
-    button.setFillStyle(0x2563eb, 1);
+  tryBtn.on("pointerout", () => {
+    if (!tryBtn.visible) return;
+    tryBtn.setFillStyle(0x2563eb, 1);
   });
-  button.on("pointerdown", () => {
-    if (!button.visible) return;
+
+  homeBtn.on("pointerover", () => {
+    if (!homeBtn.visible) return;
+    homeBtn.setFillStyle(0x0b1220, 1);
+  });
+  homeBtn.on("pointerout", () => {
+    if (!homeBtn.visible) return;
+    homeBtn.setFillStyle(0x111827, 1);
+  });
+
+  // Click handlers
+  tryBtn.on("pointerdown", () => {
+    if (!tryBtn.visible) return;
     onTryAgain?.();
+  });
+
+  homeBtn.on("pointerdown", () => {
+    if (!homeBtn.visible) return;
+    onHome?.();
   });
 
   return {
     setScore: (n) => scoreText.setText(`Score: ${n}`),
     setLives: (n) => livesText.setText(`Lives: ${n}`),
-
     toast: (message, durationMs) => showToast(message, durationMs),
 
-    showOverlay: ({ title: t, showButton }) => {
+    showOverlay: ({ title: t, showTryAgain, showHome }) => {
       backdrop.setVisible(true);
       title.setText(t);
       title.setVisible(true);
 
-      button.setVisible(!!showButton);
-      buttonText.setVisible(!!showButton);
+      tryBtn.setVisible(!!showTryAgain);
+      tryBtnText.setVisible(!!showTryAgain);
+
+      homeBtn.setVisible(!!showHome);
+      homeBtnText.setVisible(!!showHome);
     },
 
     hideOverlay: () => {
       backdrop.setVisible(false);
       title.setVisible(false);
-      button.setVisible(false);
-      buttonText.setVisible(false);
+
+      tryBtn.setVisible(false);
+      tryBtnText.setVisible(false);
+
+      homeBtn.setVisible(false);
+      homeBtnText.setVisible(false);
     },
   };
 }
