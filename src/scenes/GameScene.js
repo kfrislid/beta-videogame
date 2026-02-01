@@ -181,6 +181,7 @@ export class GameScene extends Phaser.Scene {
     // UI
     this.ui = createUI(this, {
       onTryAgain: () => this.fullReset(),
+      onHome: () => this.goHome(),
     });
     this.ui.setScore(this.state.score);
     this.ui.setLives(this.state.lives);
@@ -250,7 +251,8 @@ export class GameScene extends Phaser.Scene {
 
     this.ui.showOverlay({
       title: "YOU LOSE",
-      showButton: true,
+      showTryAgain: true,
+      showHome: true,
     });
   }
 
@@ -263,7 +265,8 @@ export class GameScene extends Phaser.Scene {
   
     this.ui.showOverlay({
       title: "YOU WIN!",
-      showButton: false,
+      showTryAgain: false,
+      showHome: true,
     });
   
     this.time.delayedCall(1400, () => {
@@ -286,7 +289,19 @@ export class GameScene extends Phaser.Scene {
 
     this.scene.restart(); // rebuild scene using the new levelIndex
   }
+
+  goHome() {
+    // Clean up overlay + resume world so HomeScene isn't affected
+    this.physics.world.resume();
+    this.ui.hideOverlay();
   
+    // Reset level index (optional). If you want to resume where you left off, remove this line.
+    this.levelIndex = 0;
+  
+    // Switch scenes
+    this.scene.start("HomeScene");
+  }
+
   fullReset() {
     this.physics.world.resume();
 
