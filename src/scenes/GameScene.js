@@ -270,7 +270,8 @@ export class GameScene extends Phaser.Scene {
       overlayMode: "win",
       showHome: true,
     });
-
+  }
+  
   loadLevel(index) {
     this.levelIndex = index;
 
