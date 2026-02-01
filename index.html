@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Phaser Platformer</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #111;
+        height: 100%;
+        overflow: hidden;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      }
+      #game { width: 100vw; height: 100vh; display: grid; place-items: center; }
+      .hint {
+        position: fixed; left: 12px; bottom: 12px;
+        color: rgba(255,255,255,0.75);
+        font-size: 14px; line-height: 1.35;
+        user-select: none; pointer-events: none;
+      }
+      .hint kbd {
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.18);
+        border-bottom-color: rgba(255,255,255,0.25);
+        padding: 2px 6px; border-radius: 6px; font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <div class="hint">
+      Move: <kbd>←</kbd><kbd>→</kbd> or <kbd>A</kbd><kbd>D</kbd> &nbsp;|&nbsp;
+      Jump: <kbd>Space</kbd> or <kbd>W</kbd> or <kbd>↑</kbd> &nbsp;|&nbsp;
+      Reset: <kbd>R</kbd>
+    </div>
+
+    <!-- Phaser via CDN (global) -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+
+    <!-- Your game (module) -->
+    <script type="module" src="./src/main.js?v=1"></script>
+  </body>
+</html>
