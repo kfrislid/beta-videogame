@@ -182,7 +182,9 @@ export class GameScene extends Phaser.Scene {
     this.ui = createUI(this, {
       onTryAgain: () => this.fullReset(),
       onHome: () => this.goHome(),
+      onNextLevel: () => this.nextLevel(),
     });
+
     this.ui.setScore(this.state.score);
     this.ui.setLives(this.state.lives);
 
