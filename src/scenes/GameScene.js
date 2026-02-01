@@ -270,17 +270,6 @@ export class GameScene extends Phaser.Scene {
       overlayMode: "win",
       showHome: true,
     });
-  
-    this.time.delayedCall(1400, () => {
-      const nextIndex = this.levelIndex + 1;
-  
-      if (nextIndex < LEVELS.length) {
-        this.loadLevel(nextIndex); // go to Level 2, Level 3, etc.
-      } else {
-        this.loadLevel(0); // loop back to Level 1 when finished
-      }
-    });
-  }
 
   loadLevel(index) {
     this.levelIndex = index;
