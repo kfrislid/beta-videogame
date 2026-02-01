@@ -1,4 +1,4 @@
-export function createUI(scene, { onTryAgain, onHome }) {
+export function createUI(scene, { onTryAgain, onHome, onNextLevel }) {
   const w = scene.scale.width;
   const h = scene.scale.height;
 
@@ -77,7 +77,7 @@ export function createUI(scene, { onTryAgain, onHome }) {
     .setVisible(false);
 
   const title = scene.add
-    .text(w / 2, h / 2 - 90, "", {
+    .text(w / 2, h / 2 - 110, "", {
       fontSize: "52px",
       color: "#ffffff",
       fontStyle: "800",
@@ -87,18 +87,18 @@ export function createUI(scene, { onTryAgain, onHome }) {
     .setScrollFactor(0)
     .setVisible(false);
 
-  // Primary button: Try Again (blue)
-  const tryBtn = scene.add
-    .rectangle(w / 2, h / 2 + 10, 260, 56, 0x2563eb, 1)
+  // Primary button (blue) - dynamic label/action
+  const primaryBtn = scene.add
+    .rectangle(w / 2, h / 2 + 0, 280, 56, 0x2563eb, 1)
     .setScrollFactor(0)
     .setVisible(false)
     .setInteractive({ useHandCursor: true });
 
-  const tryBtnText = scene.add
-    .text(w / 2, h / 2 + 10, "Try Again", {
+  const primaryBtnText = scene.add
+    .text(w / 2, h / 2 + 0, "Primary", {
       fontSize: "22px",
       color: "#ffffff",
-      fontStyle: "700",
+      fontStyle: "800",
       fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
     })
     .setOrigin(0.5)
@@ -107,13 +107,13 @@ export function createUI(scene, { onTryAgain, onHome }) {
 
   // Secondary button: Home (dark)
   const homeBtn = scene.add
-    .rectangle(w / 2, h / 2 + 80, 260, 56, 0x111827, 1)
+    .rectangle(w / 2, h / 2 + 72, 280, 56, 0x111827, 1)
     .setScrollFactor(0)
     .setVisible(false)
     .setInteractive({ useHandCursor: true });
 
   const homeBtnText = scene.add
-    .text(w / 2, h / 2 + 80, "Back to Home", {
+    .text(w / 2, h / 2 + 72, "Back to Home", {
       fontSize: "20px",
       color: "#ffffff",
       fontStyle: "700",
@@ -124,13 +124,13 @@ export function createUI(scene, { onTryAgain, onHome }) {
     .setVisible(false);
 
   // Hover effects
-  tryBtn.on("pointerover", () => {
-    if (!tryBtn.visible) return;
-    tryBtn.setFillStyle(0x1d4ed8, 1);
+  primaryBtn.on("pointerover", () => {
+    if (!primaryBtn.visible) return;
+    primaryBtn.setFillStyle(0x1d4ed8, 1);
   });
-  tryBtn.on("pointerout", () => {
-    if (!tryBtn.visible) return;
-    tryBtn.setFillStyle(0x2563eb, 1);
+  primaryBtn.on("pointerout", () => {
+    if (!primaryBtn.visible) return;
+    primaryBtn.setFillStyle(0x2563eb, 1);
   });
 
   homeBtn.on("pointerover", () => {
@@ -142,10 +142,12 @@ export function createUI(scene, { onTryAgain, onHome }) {
     homeBtn.setFillStyle(0x111827, 1);
   });
 
-  // Click handlers
-  tryBtn.on("pointerdown", () => {
-    if (!tryBtn.visible) return;
-    onTryAgain?.();
+  // Primary click routes based on mode
+  let primaryAction = null;
+
+  primaryBtn.on("pointerdown", () => {
+    if (!primaryBtn.visible) return;
+    primaryAction?.();
   });
 
   homeBtn.on("pointerdown", () => {
@@ -153,18 +155,40 @@ export function createUI(scene, { onTryAgain, onHome }) {
     onHome?.();
   });
 
+  function showPrimary(label, action) {
+    primaryBtnText.setText(label);
+    primaryAction = action;
+
+    primaryBtn.setVisible(true);
+    primaryBtnText.setVisible(true);
+  }
+
+  function hidePrimary() {
+    primaryAction = null;
+    primaryBtn.setVisible(false);
+    primaryBtnText.setVisible(false);
+  }
+
   return {
     setScore: (n) => scoreText.setText(`Score: ${n}`),
     setLives: (n) => livesText.setText(`Lives: ${n}`),
     toast: (message, durationMs) => showToast(message, durationMs),
 
-    showOverlay: ({ title: t, showTryAgain, showHome }) => {
+    // overlayMode:
+    // - "lose" => primary = Try Again
+    // - "win"  => primary = Next Level
+    showOverlay: ({ title: t, overlayMode, showHome }) => {
       backdrop.setVisible(true);
       title.setText(t);
       title.setVisible(true);
 
-      tryBtn.setVisible(!!showTryAgain);
-      tryBtnText.setVisible(!!showTryAgain);
+      if (overlayMode === "lose") {
+        showPrimary("Try Again", () => onTryAgain?.());
+      } else if (overlayMode === "win") {
+        showPrimary("Next Level", () => onNextLevel?.());
+      } else {
+        hidePrimary();
+      }
 
       homeBtn.setVisible(!!showHome);
       homeBtnText.setVisible(!!showHome);
@@ -173,10 +197,7 @@ export function createUI(scene, { onTryAgain, onHome }) {
     hideOverlay: () => {
       backdrop.setVisible(false);
       title.setVisible(false);
-
-      tryBtn.setVisible(false);
-      tryBtnText.setVisible(false);
-
+      hidePrimary();
       homeBtn.setVisible(false);
       homeBtnText.setVisible(false);
     },
