@@ -11,7 +11,7 @@ export function resetCoins(scene, coins, coinPositions) {
 
 function spawn(scene, coins, coinPositions) {
   const size = 24;
-  const radius = 10;
+  const radius = 30;
 
   for (const p of coinPositions) {
     const coin = coins.create(p.x, p.y, "coin");
