@@ -1,6 +1,7 @@
 import { LEVELS } from "../levels.js";
 import { ensureTextures } from "../systems/textures.js";
 import { createUI } from "../systems/ui.js";
+import { ensureSfx } from "../systems/audio.js";
 import {
   createPlayer,
   ensurePlayerAnimations,
@@ -81,6 +82,7 @@ export class GameScene extends Phaser.Scene {
     this.state.lastJumpPressedAt = -9999;
     
     ensureTextures(this);
+    ensureSfx(this);
     ensurePlayerAnimations(this);
 
     this.level = LEVELS[this.levelIndex];
@@ -123,6 +125,7 @@ export class GameScene extends Phaser.Scene {
     
       setCheckpointActive(this.checkpoints, cp);
       this.ui.toast("Checkpoint saved!", 900);
+      this.sfx?.checkpoint();
     });
     
     // Coins
@@ -132,6 +135,7 @@ export class GameScene extends Phaser.Scene {
       coin.disableBody(true, true);
       this.state.score += GAME.coinPoints;
       this.ui.setScore(this.state.score);
+      this.sfx?.coin();
 
       if (this.coins.countActive(true) === 0) {
         this.time.delayedCall(450, () => {
@@ -158,8 +162,10 @@ export class GameScene extends Phaser.Scene {
       if (result === "stomp") {
         this.state.score += GAME.enemyPoints;
         this.ui.setScore(this.state.score);
+        this.sfx?.stomp();
       } else if (result === "hurt") {
         this.loseLife();
+        this.sfx?.hurt();
       }
     });
 
@@ -177,7 +183,13 @@ export class GameScene extends Phaser.Scene {
       D: Phaser.Input.Keyboard.KeyCodes.D,
       W: Phaser.Input.Keyboard.KeyCodes.W,
       R: Phaser.Input.Keyboard.KeyCodes.R,
+      M: Phaser.Input.Keyboard.KeyCodes.M,
       SPACE: Phaser.Input.Keyboard.KeyCodes.SPACE,
+    });
+
+    this.keys.M.on("down", () => {
+      const muted = this.sfx?.toggleMute();
+      this.ui.toast(muted ? "SFX muted" : "SFX unmuted", 700);
     });
 
     // UI
@@ -247,6 +259,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   gameOver() {
+    this.sfx?.lose();
     this.state.mode = Mode.LOSE;
 
     this.physics.world.pause();
@@ -261,6 +274,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   win() {
+    this.sfx?.win();
     this.state.mode = Mode.WIN;
   
     this.physics.world.pause();

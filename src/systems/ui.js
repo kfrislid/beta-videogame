@@ -123,10 +123,11 @@ export function createUI(scene, { onTryAgain, onHome, onNextLevel }) {
     .setScrollFactor(0)
     .setVisible(false);
 
-  // Hover effects
+  // Hover effects (+ sound)
   primaryBtn.on("pointerover", () => {
     if (!primaryBtn.visible) return;
     primaryBtn.setFillStyle(0x1d4ed8, 1);
+    scene.sfx?.uiHover();
   });
   primaryBtn.on("pointerout", () => {
     if (!primaryBtn.visible) return;
@@ -136,6 +137,7 @@ export function createUI(scene, { onTryAgain, onHome, onNextLevel }) {
   homeBtn.on("pointerover", () => {
     if (!homeBtn.visible) return;
     homeBtn.setFillStyle(0x0b1220, 1);
+    scene.sfx?.uiHover();
   });
   homeBtn.on("pointerout", () => {
     if (!homeBtn.visible) return;
@@ -147,11 +149,15 @@ export function createUI(scene, { onTryAgain, onHome, onNextLevel }) {
 
   primaryBtn.on("pointerdown", () => {
     if (!primaryBtn.visible) return;
+    scene.sfx?.unlock();
+    scene.sfx?.uiClick();
     primaryAction?.();
   });
 
   homeBtn.on("pointerdown", () => {
     if (!homeBtn.visible) return;
+    scene.sfx?.unlock();
+    scene.sfx?.uiClick();
     onHome?.();
   });
 

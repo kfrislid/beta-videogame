@@ -86,7 +86,11 @@ export function updatePlayerMovement({ scene, player, cursors, keys, time, state
   if (buffered && (body.blocked.down || canCoyote)) {
     body.setVelocityY(-jumpSpeed);
     state.lastJumpPressedAt = -9999;
+
+    // SFX: jump (only when jump actually triggers)
+    scene.sfx?.jump();
   }
+
 
   updatePlayerAnimation(player);
 }
