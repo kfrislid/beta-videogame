@@ -6,6 +6,7 @@ export function ensureTextures(scene) {
   makeEnemyTexture(scene);
   makeFlagTexture(scene);
   makeCheckpointTextures(scene);
+  makeSpikeTexture(scene);
 }
 
 function makePlayerTexture(scene) {
@@ -149,6 +150,43 @@ function makeEnemyTexture(scene) {
   g.fillCircle(s / 2 - 9, s / 2 - 6, 3);
 
   g.generateTexture("enemy", s, s);
+  g.destroy();
+}
+
+function makeSpikeTexture(scene) {
+  if (scene.textures.exists("spike")) return;
+
+  const w = 40;
+  const h = 26;
+
+  const g = scene.add.graphics();
+
+  // Base plate
+  g.fillStyle(0x111827, 1);
+  g.fillRoundedRect(0, h - 6, w, 6, 3);
+
+  // Spikes
+  g.fillStyle(0x94a3b8, 1);
+  const spikeCount = 5;
+  const spikeW = w / spikeCount;
+
+  for (let i = 0; i < spikeCount; i++) {
+    const x0 = i * spikeW;
+    g.fillTriangle(
+      x0 + 2, h - 6,
+      x0 + spikeW / 2, 2,
+      x0 + spikeW - 2, h - 6
+    );
+  }
+
+  // Highlight
+  g.lineStyle(2, 0xe5e7eb, 0.8);
+  for (let i = 0; i < spikeCount; i++) {
+    const x0 = i * spikeW;
+    g.lineBetween(x0 + spikeW / 2, 6, x0 + spikeW / 2, h - 8);
+  }
+
+  g.generateTexture("spike", w, h);
   g.destroy();
 }
 

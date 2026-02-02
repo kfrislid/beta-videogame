@@ -169,6 +169,25 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
+    // --- Spikes / Hazards ---
+    this.spikes = this.physics.add.staticGroup();
+
+    (this.level.spikes || []).forEach((p) => {
+      const spike = this.spikes.create(p.x, p.y, "spike");
+      spike.setOrigin(0.5, 0.5);
+
+      // Slightly smaller hitbox so it feels fair
+      spike.body.setSize(34, 18, true);
+      spike.body.setOffset(3, 8);
+    });
+
+    // Player touching spikes = hurt
+    this.physics.add.overlap(this.player, this.spikes, () => {
+      if (this.state.mode !== Mode.PLAY) return;
+      this.onPlayerHazardHit();
+    });
+
+
     // Goal
     this.goal = createGoal(this, this.level.goal);
     this.physics.add.overlap(this.player, this.goal, () => {
@@ -205,6 +224,44 @@ export class GameScene extends Phaser.Scene {
     // Reset hotkey (dev/testing)
     this.keys.R.on("down", () => this.fullReset());
   }
+
+  onPlayerHazardHit() {
+    // Prevent losing multiple lives instantly from overlap
+    if (this._invulnUntil && this.time.now < this._invulnUntil) return;
+    this._invulnUntil = this.time.now + 900;
+
+    this.sfx?.hurt();
+
+    // ✅ Best option: call the same function you already call on enemy damage.
+    // Look in your enemy-hit logic and find what it calls.
+    // Common names:
+    // this.loseLife()
+    // this.damagePlayer()
+    // this.playerHit()
+    //
+    // For now, I’ll try loseLife() first if it exists:
+    if (typeof this.loseLife === "function") {
+      this.loseLife();
+      return;
+    }
+
+    // Fallback: do a simple life loss + respawn based on your state system
+    this.state.lives -= 1;
+    this.ui.setLives(this.state.lives);
+
+    if (this.state.lives <= 0) {
+      this.gameOver();
+    } else {
+      // Use your existing respawn flow if you have it:
+      if (typeof this.respawn === "function") this.respawn();
+      else if (typeof this.respawnPlayer === "function") this.respawnPlayer();
+      else {
+        // absolute fallback: restart scene
+        this.scene.restart();
+      }
+    }
+  }
+
 
   update(time) {
     if (this.state.mode !== Mode.PLAY) return;
