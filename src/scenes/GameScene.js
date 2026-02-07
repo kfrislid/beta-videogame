@@ -10,6 +10,11 @@ import {
   setPlayerFrozen,
   flashInvuln,
 } from "../systems/player.js";
+import {
+  createMovingPlatforms,
+  updateMovingPlatforms,
+  carryPlayerWithPlatforms,
+} from "../systems/movingPlatforms.js";
 import { createCoins, resetCoins } from "../systems/coins.js";
 import {
   createEnemies,
@@ -51,6 +56,7 @@ export class GameScene extends Phaser.Scene {
     this.level = null;
 
     this.platforms = null;
+    this.movingPlatforms = null;
     this.player = null;
     this.coins = null;
     this.enemies = null;
@@ -107,9 +113,26 @@ export class GameScene extends Phaser.Scene {
     this.platforms = this.physics.add.staticGroup();
     for (const p of this.level.platforms) this.addPlatform(p.x, p.y, p.w, p.h);
 
+    // Moving platforms
+    this.movingPlatforms = createMovingPlatforms(this, this.level.movingPlatforms || []);
+
+
     // Player
     this.player = createPlayer(this, this.level.spawn.x, this.level.spawn.y);
     this.physics.add.collider(this.player, this.platforms);
+    this.physics.add.collider(this.player, this.movingPlatforms);
+    // --- Moving platform timing fix ---
+    // Move platforms BEFORE physics collisions, then carry player AFTER collisions.
+    // This removes the "jitter" caused by moving platforms in update().
+    this.events.on("preupdate", (time, delta) => {
+      const dt = delta / 1000;
+      updateMovingPlatforms(this, this.movingPlatforms, dt);
+    });
+
+    this.events.on("postupdate", () => {
+      carryPlayerWithPlatforms(this, this.player, this.movingPlatforms);
+    });
+
 
     // Camera follow
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
@@ -283,6 +306,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     updateEnemies(this.enemies);
+
   }
 
   addPlatform(x, y, w, h) {

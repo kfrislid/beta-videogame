@@ -62,6 +62,12 @@ export const LEVELS = [
       { x: 520, y: 540 }
     ],
 
+    movingPlatforms: [
+      // Moves 220px to the right and back
+      { x: 520, y: 420, w: 140, h: 22, dx: 220, dy: 0, speed: 80 },
+    ],
+
+
   },
 
   // -----------------------------
