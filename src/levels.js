@@ -56,6 +56,16 @@ export const LEVELS = [
       { x: 2660, y: 400, minX: 2520, maxX: 2780 },
       { x: 3200, y: 640, minX: 3050, maxX: 3350 },
       { x: 3450, y: 640, minX: 3360, maxX: 3560 },
+      {
+      type: "fly",
+      x: 700,
+      y: 260,
+      minX: 620,
+      maxX: 860,
+      speed: 95,
+      bobAmp: 18,
+      bobSpeed: 2,
+    },
     ],
 
     spikes: [
@@ -66,6 +76,7 @@ export const LEVELS = [
       // Moves 220px to the right and back
       { x: 520, y: 420, w: 140, h: 22, dx: 220, dy: 0, speed: 80 },
     ],
+    
 
 
   },

@@ -305,7 +305,7 @@ export class GameScene extends Phaser.Scene {
       feel: { coyoteMs: GAME.coyoteMs, jumpBufferMs: GAME.jumpBufferMs },
     });
 
-    updateEnemies(this.enemies);
+    updateEnemies(this.enemies, time);
 
   }
 

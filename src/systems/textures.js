@@ -7,6 +7,7 @@ export function ensureTextures(scene) {
   makeFlagTexture(scene);
   makeCheckpointTextures(scene);
   makeSpikeTexture(scene);
+  makeFlyingEnemyTexture(scene);
 }
 
 function makePlayerTexture(scene) {
@@ -152,6 +153,36 @@ function makeEnemyTexture(scene) {
   g.generateTexture("enemy", s, s);
   g.destroy();
 }
+
+function makeFlyingEnemyTexture(scene) {
+  if (scene.textures.exists("enemy_fly")) return;
+
+  const w = 40;
+  const h = 30;
+  const g = scene.add.graphics();
+
+  // Body
+  g.fillStyle(0xa855f7, 1);
+  g.fillRoundedRect(4, 8, w - 8, h - 12, 10);
+
+  // Eyes
+  g.fillStyle(0x111827, 1);
+  g.fillCircle(w / 2 - 7, h / 2, 3);
+  g.fillCircle(w / 2 + 7, h / 2, 3);
+
+  // Wings
+  g.fillStyle(0xe9d5ff, 1);
+  g.fillEllipse(8, 12, 14, 10);
+  g.fillEllipse(w - 8, 12, 14, 10);
+
+  // Tiny stinger
+  g.fillStyle(0x581c87, 1);
+  g.fillTriangle(w / 2 - 3, h - 6, w / 2 + 3, h - 6, w / 2, h - 1);
+
+  g.generateTexture("enemy_fly", w, h);
+  g.destroy();
+}
+
 
 function makeSpikeTexture(scene) {
   if (scene.textures.exists("spike")) return;
